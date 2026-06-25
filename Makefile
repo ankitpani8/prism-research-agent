@@ -27,6 +27,9 @@ typecheck:      ## mypy on core/
 eval:           ## run the eval harness + regression demo
 	python eval/run_eval.py
 
+smoke:          ## Phase 1: prove providers bind + local critic live
+	python scripts/smoke.py
+
 diagram:        ## export the Mermaid diagram from the compiled graph
 	python -c "from core.graph import export_diagram; export_diagram()"
 
