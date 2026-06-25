@@ -1,1 +1,21 @@
-%% Exported from the compiled LangGraph graph in Phase 2 via `make diagram`.
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	planner(planner)
+	research(research)
+	critic(critic)
+	summariser(summariser)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> planner;
+	critic -. &nbsp;replan&nbsp; .-> planner;
+	critic -. &nbsp;summarise&nbsp; .-> summariser;
+	planner --> research;
+	research --> critic;
+	summariser --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
