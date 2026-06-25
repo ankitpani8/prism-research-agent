@@ -1,10 +1,8 @@
-"""Robust structured-output helper.
+"""Robust async structured-output helper + defensive JSON parsing.
 
-Big hosted models (Gemini) do structured output reliably, so we use it. But it
-can fail (schema quirks, transient errors), so we fall back to a manual JSON
-prompt + Pydantic validation — the M6 "deterministic parse" lesson. The small
-local critic model uses _parse_json directly because it is less reliable with
-the structured-output API.
+Native structured output for big hosted models, with a manual JSON fallback
+(M6 deterministic-parse lesson). include_raw=True lets us capture token usage
+even on structured calls and feed it to obs.record_usage.
 """
 from __future__ import annotations
 
@@ -14,14 +12,14 @@ from typing import TypeVar
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
+from core.obs import record_usage
+
 T = TypeVar("T", bound=BaseModel)
 
 
 def parse_json(raw: str) -> dict | None:
-    """LLMs wrap JSON in code fences sometimes. Strip and parse defensively."""
     raw = (raw or "").strip()
     raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    # Grab the outermost JSON object/array if there's surrounding prose.
     for open_c, close_c in (("{", "}"), ("[", "]")):
         if open_c in raw and close_c in raw:
             raw = raw[raw.index(open_c): raw.rindex(close_c) + 1]
@@ -32,13 +30,22 @@ def parse_json(raw: str) -> dict | None:
         return None
 
 
-def structured(model, schema: type[T], messages: list) -> T:
-    """Try native structured output; fall back to JSON-prompt + validation."""
+async def astructured(model, schema: type[T], messages: list, model_name: str = "?") -> T:
+    """Try native structured output (capturing usage); fall back to JSON parse."""
     try:
-        return model.with_structured_output(schema).invoke(messages)
+        runnable = model.with_structured_output(schema, include_raw=True)
+        res = await runnable.ainvoke(messages)
+        if isinstance(res, dict):  # include_raw shape (real models, matching fakes)
+            if res.get("raw") is not None:
+                record_usage(model_name, res["raw"])
+            if res.get("parsed") is not None:
+                return res["parsed"]
+            raise ValueError("structured parsing returned no object")
+        return res  # a simple fake returned the parsed object directly
     except Exception:
-        raw = model.invoke(
+        raw = await model.ainvoke(
             messages + [HumanMessage(content="Return ONLY valid JSON for the schema. No prose.")]
         )
+        record_usage(model_name, raw)
         data = parse_json(getattr(raw, "content", "")) or {}
         return schema.model_validate(data)

@@ -1,13 +1,14 @@
-"""Phase 2 manual run — text-only end-to-end pass with REAL models.
+"""Phase 3 manual run (async) — real tools, real grounding.
 
     python scripts/run_graph.py
-    python scripts/run_graph.py "Your research question here"
+    python scripts/run_graph.py "Your research question"
 
-Prints the live agent trace (planner -> research -> critic -> summariser, with
-the re-plan loop) then the final structured brief. No image yet (Phase 4).
+Streams the agent trace (planner -> research fan-out -> critic -> summariser,
+with the re-plan loop) then prints the structured brief and the telemetry line.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -20,16 +21,13 @@ from core.obs import telemetry  # noqa: E402
 DEFAULT_Q = "What are the top drivers of prepaid customer complaints this quarter?"
 
 
-def main() -> int:
+async def main() -> int:
     question = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_Q
     print(f"\nQUESTION: {question}\n" + "=" * 60)
-
     app = build_graph()
-    cfg = {"configurable": {"thread_id": "phase2-demo"}}
-
+    cfg = {"configurable": {"thread_id": "phase3-demo"}}
     with telemetry(question):
-        final_state = app.invoke(initial_state(question), config=cfg)
-
+        final_state = await app.ainvoke(initial_state(question), config=cfg)
     brief = final_state["final"]
     print("\n" + "=" * 60 + "\nFINAL BRIEF\n" + "=" * 60)
     print(json.dumps(brief.model_dump(), indent=2))
@@ -38,4 +36,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(asyncio.run(main()))

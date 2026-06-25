@@ -1,12 +1,11 @@
-"""Observability — per-request token/latency/cost telemetry + a UI trace event.
+"""Observability — per-request token/latency/cost telemetry + UI trace events.
 
-Port of learning_AgenticAI/module5_production/03_telemetry.py, plus two small
-additions Prism needs downstream:
-  - cost accounting (PRICING table; Ollama = $0 — the local-critic cost lever).
-  - TraceEvent: the per-agent event the Phase-6 Streamlit panel will render.
-    ONE source of truth — the same events feed logs and the live UI.
-
-Everything emits as JSON lines to stdout, pipeable to any log aggregator later.
+Port of learning_AgenticAI/module5_production/03_telemetry.py, extended for Prism:
+  - cost accounting (PRICING; Ollama = $0 — the local-critic cost lever).
+  - TraceEvent: the per-agent event the Streamlit panel will render (Phase 6).
+  - A contextvar so async agent nodes roll their LLM usage up into ONE request
+    telemetry line, even across asyncio.gather fan-out. (Fixes the Phase-2 gap
+    where node calls logged zero tokens.)
 """
 from __future__ import annotations
 
@@ -14,13 +13,13 @@ import json
 import time
 import uuid
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 
-# Approximate USD per 1M tokens. VERIFY against current provider pricing before
-# you quote these as fact — they drift. The architecture point (local critic is
-# free, cost attributed per request) does not depend on the exact cents.
 PRICING: dict[str, tuple[float, float]] = {
-    # model substring : (input_per_1M, output_per_1M)
+    # model substring : (USD per 1M input, USD per 1M output). Approximate —
+    # verify against current provider pricing. Architecture point (local=free,
+    # cost attributed per request) does not depend on exact cents.
     "gemini-2.5-flash-lite": (0.10, 0.40),
     "gemini-2.5-flash": (0.30, 2.50),
     "claude-haiku": (1.00, 5.00),
@@ -38,10 +37,9 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
 
 @dataclass
 class TraceEvent:
-    """A single agent state change. Streamed to the UI trace panel (Phase 6)."""
-    agent: str                      # "planner" | "researcher" | "critic" | ...
-    status: str                     # "running" | "complete" | "flagged" | "error"
-    detail: str = ""                # human-readable, e.g. "validating 7 claims, 2 flagged"
+    agent: str
+    status: str            # running | complete | flagged | error
+    detail: str = ""
     ts: float = field(default_factory=time.time)
 
     def emit(self) -> None:
@@ -58,22 +56,20 @@ class RequestTelemetry:
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
+    by_model: dict = field(default_factory=dict)   # per-provider breakdown
     error: str | None = None
 
     def add_llm_usage(self, model: str, input_t: int, output_t: int) -> None:
         self.llm_calls += 1
         self.input_tokens += input_t
         self.output_tokens += output_t
-        self.cost_usd += estimate_cost(model, input_t, output_t)
-
-    def record_response(self, model: str, response) -> None:
-        """Pull token usage off a LangChain response if the provider reported it."""
-        usage = getattr(response, "usage_metadata", None) or {}
-        self.add_llm_usage(
-            model,
-            int(usage.get("input_tokens", 0) or 0),
-            int(usage.get("output_tokens", 0) or 0),
-        )
+        cost = estimate_cost(model, input_t, output_t)
+        self.cost_usd = round(self.cost_usd + cost, 8)
+        m = self.by_model.setdefault(model, {"calls": 0, "in": 0, "out": 0, "usd": 0.0})
+        m["calls"] += 1
+        m["in"] += input_t
+        m["out"] += output_t
+        m["usd"] = round(m["usd"] + cost, 8)
 
     def finalize(self) -> None:
         self.duration_ms = round((time.time() - self.started_at) * 1000, 1)
@@ -82,15 +78,34 @@ class RequestTelemetry:
         print("[telemetry] " + json.dumps(asdict(self)))
 
 
+# Active request telemetry for the current async context. Set by telemetry();
+# read by record_usage() inside agent nodes (propagates into gather tasks).
+_current: ContextVar[RequestTelemetry | None] = ContextVar("prism_telemetry", default=None)
+
+
+def record_usage(model_name: str, response) -> None:
+    """Roll a LangChain response's token usage into the active request, if any."""
+    t = _current.get()
+    if t is None:
+        return
+    usage = getattr(response, "usage_metadata", None) or {}
+    t.add_llm_usage(
+        model_name,
+        int(usage.get("input_tokens", 0) or 0),
+        int(usage.get("output_tokens", 0) or 0),
+    )
+
+
 @contextmanager
 def telemetry(query: str):
-    """Use in a `with` block to guarantee finalize/emit runs even on error."""
     t = RequestTelemetry(user_query=query[:200])
+    token = _current.set(t)
     try:
         yield t
     except Exception as e:
         t.error = f"{type(e).__name__}: {str(e)[:200]}"
         raise
     finally:
+        _current.reset(token)
         t.finalize()
         t.emit()
