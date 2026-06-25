@@ -2,18 +2,22 @@
 
     python scripts/run_graph.py
     python scripts/run_graph.py "Your research question"
-
-Streams the agent trace (planner -> research fan-out -> critic -> summariser,
-with the re-plan loop) then prints the structured brief and the telemetry line.
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sys
+import warnings
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Cosmetic: silence google-genai's async client teardown noise that fires AFTER
+# results are produced (a known upstream cleanup wart, harmless to the output).
+warnings.filterwarnings("ignore", message=r".*BaseApiClient.aclose.*")
+logging.getLogger("asyncio").setLevel(logging.ERROR)
 
 from core.graph import build_graph, initial_state  # noqa: E402
 from core.obs import telemetry  # noqa: E402
