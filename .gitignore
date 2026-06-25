@@ -1,0 +1,37 @@
+# Secrets — NEVER commit. (NOTE: .env.example IS committed on purpose so graders
+# can copy it. Only the real .env is ignored.)
+.env
+.env.local
+*.key
+*.pem
+
+# Operational guide for Claude Code — gitignored at Ankit's request
+CLAUDE.md
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local data, caches, indexes, logs
+*.log
+logs/
+data/local/
+chroma_db/
+*.sqlite3
+.cache/

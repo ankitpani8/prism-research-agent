@@ -1,0 +1,7 @@
+# Dev/test/CI deps. Kept separate so CI (lint + tests + eval smoke) installs a
+# light set and runs with NO live API keys.
+-r requirements.txt
+pytest==8.3.4
+pytest-asyncio==0.25.2
+ruff==0.9.2
+mypy>=1.13,<2

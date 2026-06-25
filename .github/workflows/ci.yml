@@ -1,0 +1,21 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Phase 0: install only the light test deps so CI is fast and needs NO
+      # live API keys. Phase 7 expands this to the eval smoke on a stub provider.
+      - name: Install light test deps
+        run: pip install pytest==8.3.4 pytest-asyncio==0.25.2 ruff==0.9.2 python-dotenv==1.2.2 pydantic==2.12.5
+      - name: Lint
+        run: ruff check .
+      - name: Test rail
+        run: pytest -v
