@@ -15,7 +15,7 @@ langchain-text-splitters==1.1.2
 
 # --- Tools: retrieval / search / docs ---
 chromadb==1.1.1
-sentence-transformers==5.4.1   # local embeddings (all-MiniLM-L6-v2), keyless
+onnxruntime==1.20.1   # backs Chroma's default ONNX MiniLM embeddings (no torch)
 tavily-python==0.7.14
 ddgs==9.6.1
 pypdf==6.1.4
