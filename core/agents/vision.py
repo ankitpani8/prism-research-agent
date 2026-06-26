@@ -24,6 +24,17 @@ _PROMPT = (
     "(values and direction), and any notable anomalies. Do not invent numbers."
 )
 
+# Providers disagree on the multimodal content-block shape. Try the known-good
+# forms in order; the first that the bound model accepts wins. (gemini via
+# langchain-google-genai usually accepts the first two; the third is the
+# langchain-core standard block.)
+def _image_blocks(b64: str):
+    return [
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+        {"type": "image_url", "image_url": f"data:image/png;base64,{b64}"},
+        {"type": "image", "source_type": "base64", "data": b64, "mime_type": "image/png"},
+    ]
+
 
 def _warn(msg: str) -> None:
     print(f"[vision-error] {msg}", file=sys.stderr)
@@ -41,11 +52,19 @@ async def vision_finding(model, model_name: str, image_path: str, subtask: SubTa
                        source_type="vision", source_ref="", subtask_id=subtask.id)
     try:
         b64 = base64.b64encode(p.read_bytes()).decode("utf-8")
-        msg = HumanMessage(content=[
-            {"type": "text", "text": f"{_PROMPT}\n\nTask: {subtask.description}"},
-            {"type": "image_url", "image_url": f"data:image/png;base64,{b64}"},
-        ])
-        insights = await astructured(model, VisionInsights, [msg], model_name=model_name)
+        text_block = {"type": "text", "text": f"{_PROMPT}\n\nTask: {subtask.description}"}
+        insights = None
+        last_err: Exception | None = None
+        for img_block in _image_blocks(b64):
+            try:
+                msg = HumanMessage(content=[text_block, img_block])
+                insights = await astructured(model, VisionInsights, [msg], model_name=model_name)
+                break
+            except Exception as fmt_err:  # noqa: BLE001 - try the next content shape
+                last_err = fmt_err
+                continue
+        if insights is None:
+            raise last_err or RuntimeError("no accepted image format")
         readout = (f"Dashboard readout — Top complaint categories: "
                    f"{', '.join(insights.top_categories) or 'n/a'}. "
                    f"NPS: {insights.nps or 'n/a'}. "
