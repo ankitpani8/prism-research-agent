@@ -18,10 +18,22 @@ from core.schemas import ResearchState
 
 
 def _real_models():
-    from core.byok import select_all_models
-    sels = select_all_models(["light", "critic", "heavy", "vision"])
-    models = {r: sels[r].to_langchain(temperature=0) for r in ("light", "critic", "heavy", "vision")}
-    names = {r: sels[r].name for r in ("light", "critic", "heavy", "vision")}
+    from core.byok import select_all_models, select_model_for_role
+    sels = select_all_models(["light", "critic", "heavy"])  # required roles
+    models = {r: sels[r].to_langchain(temperature=0) for r in ("light", "critic", "heavy")}
+    names = {r: sels[r].name for r in ("light", "critic", "heavy")}
+    # Vision is OPTIONAL — there is no text-only fallback for images, so a missing
+    # multimodal model must NOT crash the graph. Bind None; the vision agent then
+    # returns a clean "unavailable" finding and text-only runs proceed.
+    try:
+        vsel = select_model_for_role("vision")
+        models["vision"] = vsel.to_langchain(temperature=0)
+        names["vision"] = vsel.name
+    except Exception as e:
+        print(f"[vision] no multimodal model available ({type(e).__name__}) — "
+              f"vision disabled; text-only runs proceed.")
+        models["vision"] = None
+        names["vision"] = "none"
     return models, names
 
 

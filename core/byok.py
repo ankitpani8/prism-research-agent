@@ -31,20 +31,22 @@ ROLE_PREFERENCES: dict[str, list[tuple[str, str]]] = {
     # Strong synthesis / writing (Summariser, re-plan reasoning). Degrade through
     # hosted-small models for QUALITY before ever touching the tiny local model.
     "heavy": [
+        ("qwen2.5:1.5b", "ollama"),
         ("gemini-2.5-flash", "gemini"),
         ("gemini-2.5-flash-lite", "gemini"),
         ("claude-sonnet-4-6", "anthropic"),
         ("claude-haiku-4-5", "anthropic"),
-        ("qwen2.5:1.5b", "ollama"),          # last resort only
+        # ("qwen2.5:1.5b", "ollama"),          # last resort only
     ],
     # Bounded reasoning: research, planning, claim synthesis. Same quality ladder;
     # local qwen is the LAST resort, not the second option (a 1.5B model plans/
     # synthesises poorly — see the 429-fallback lesson).
     "light": [
+        ("qwen2.5:1.5b", "ollama"),
         ("gemini-2.5-flash", "gemini"),
         ("gemini-2.5-flash-lite", "gemini"),
         ("claude-haiku-4-5", "anthropic"),
-        ("qwen2.5:1.5b", "ollama"),          # last resort only
+                  # last resort only
     ],
     # Vision / multimodal: MUST be a model that can see images — NEVER qwen
     # (the local 1.5B model is text-only). Falls back across hosted multimodal.
