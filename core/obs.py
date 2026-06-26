@@ -97,8 +97,10 @@ def record_usage(model_name: str, response) -> None:
 
 
 @contextmanager
-def telemetry(query: str):
+def telemetry(query: str, request_id: str | None = None):
     t = RequestTelemetry(user_query=query[:200])
+    if request_id:
+        t.request_id = request_id
     token = _current.set(t)
     try:
         yield t
