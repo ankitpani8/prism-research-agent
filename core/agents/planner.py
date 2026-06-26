@@ -12,6 +12,7 @@ from dataclasses import asdict
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from core.guardrails import screen_injection
 from core.llm_json import astructured
 from core.obs import TraceEvent
 from core.schemas import Plan, ResearchState, SubTask
@@ -48,6 +49,14 @@ def make_planner_node(model, model_name: str = "light"):
         replanning = state.get("critic_report") is not None
         replan_count = state.get("replan_count", 0) + (1 if replanning else 0)
         has_image = bool(state.get("image_path"))
+        # Input guardrail (OWASP-LLM01): screen the user question before it
+        # enters any prompt. Detected -> flag on the trace; we neutralise by
+        # treating the question as data, not instructions.
+        hits = screen_injection(state["question"])
+        if hits:
+            TraceEvent("guardrail", "flagged",
+                       f"prompt-injection screen matched {len(hits)} pattern(s)").emit()
+
         ev = TraceEvent("planner", "running",
                         "re-planning around flagged claims" if replanning else "decomposing question")
         ev.emit()

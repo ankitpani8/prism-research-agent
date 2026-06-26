@@ -1,23 +1,22 @@
-"""Critic / Validator (async) — LOCAL Ollama model + a DETERMINISTIC groundedness
-signal. Concurrent per-claim checks.
+"""Critic / Validator (async) — LOCAL Ollama model + DETERMINISTIC guardrails.
 
-Grounding (option 1) is claim-vs-its-own-source. Three layers, deterministic first:
-  1. No source_ref  -> UNSUPPORTED, no LLM call (cites_source check).
-  2. Lexical overlap -> a claim that largely restates its source is grounded by
-     construction (deterministic), robust to the 1.5B critic's noise.
-  3. LLM judgement   -> catches semantic drift the lexical check would miss.
-Final: grounded = (LLM says grounded) OR (lexical overlap high). A fabricated
-claim has low overlap AND fails the LLM check, so it stays flagged.
+Three layers, deterministic first (see core/guardrails.py):
+  1. cites_source  -> no source_ref => UNSUPPORTED, no LLM call.
+  2. lexical_overlap -> a claim that restates its source is grounded by
+     construction (robust to the 1.5B critic's noise).
+  3. LLM judgement -> catches semantic drift the lexical check would miss.
+Final: grounded = (LLM grounded) OR (deterministic grounded). A fabricated claim
+has low overlap AND fails the LLM check -> stays flagged.
 """
 from __future__ import annotations
 
 import asyncio
-import re
 from dataclasses import asdict
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from core.config import settings
+from core.guardrails import LEX_THRESHOLD, cites_source, lexical_overlap
 from core.llm_json import parse_json
 from core.obs import TraceEvent, record_usage
 from core.schemas import ClaimVerdict, CriticReport, ResearchState
@@ -29,34 +28,13 @@ _SYS = (
     'JSON only: {\"grounded\": true|false, \"confidence\": 0.0-1.0, \"reason\": \"<short>\"}'
 )
 
-_STOP = {
-    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for", "with",
-    "this", "that", "these", "those", "is", "are", "was", "were", "be", "been",
-    "from", "by", "as", "at", "it", "its", "their", "most", "single", "relevant", "finding", "snippets", "source", "claim", "data", "current",
-    "quarter", "regarding", "specific", "given", "provided", "identify",
-}
-
-_LEX_THRESHOLD = 0.5
-
-
-def _content_words(text: str) -> set[str]:
-    return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower())
-            if len(w) > 3 and w not in _STOP}
-
-
-def _lexical_overlap(claim: str, source: str) -> float:
-    cw = _content_words(claim)
-    if not cw:
-        return 0.0
-    return len(cw & _content_words(source)) / len(cw)
-
 
 async def _judge_one(model, model_name, claim: str, source: str) -> ClaimVerdict:
-    if not (source or "").strip():
+    if not cites_source(source):
         return ClaimVerdict(claim=claim, grounded=False, confidence=0.0,
-                            reason="no source reference (deterministic)")
-    overlap = _lexical_overlap(claim, source)
-    det_grounded = overlap >= _LEX_THRESHOLD
+                            reason="no source reference (deterministic cites_source)")
+    overlap = lexical_overlap(claim, source)
+    det_grounded = overlap >= LEX_THRESHOLD
 
     llm_grounded, llm_conf, reason = det_grounded, 0.0, ""
     try:
@@ -71,10 +49,7 @@ async def _judge_one(model, model_name, claim: str, source: str) -> ClaimVerdict
         reason = f"critic exec failed ({type(e).__name__})"
 
     grounded = llm_grounded or det_grounded
-    if grounded:
-        confidence = round(max(llm_conf, overlap), 3)
-    else:
-        confidence = round(min(llm_conf, 0.3), 3)
+    confidence = round(max(llm_conf, overlap), 3) if grounded else round(min(llm_conf, 0.3), 3)
     note = f"{reason} [lexical={overlap:.2f}{'/det-grounded' if det_grounded else ''}]"
     return ClaimVerdict(claim=claim, grounded=grounded, confidence=confidence, reason=note[:200])
 

@@ -7,29 +7,10 @@ web search: returns a list of dicts and never raises (contract), via a stub.
 import asyncio
 from types import SimpleNamespace
 
-from chromadb import Documents, EmbeddingFunction, Embeddings
-
 import core.tools.vector_store as vs
 import core.tools.web_search as ws
 from core.tools.vector_store import chunk_text
-
-
-class FakeEmbed(EmbeddingFunction):
-    """Deterministic 16-dim hashing embedding — offline, no model download."""
-
-    def __init__(self):
-        pass
-
-    def name(self) -> str:
-        return "fake-embed-16"
-
-    def __call__(self, input: Documents) -> Embeddings:
-        import hashlib
-        out = []
-        for t in input:
-            h = hashlib.sha256(t.encode("utf-8")).digest()
-            out.append([b / 255.0 for b in h[:16]])
-        return out
+from tests.conftest import FakeEmbed
 
 
 def test_chunk_text_overlaps():

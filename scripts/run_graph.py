@@ -1,7 +1,9 @@
-"""Phase 3 manual run (async) — real tools, real grounding.
+"""Manual run (async) — real tools, real grounding, optional dashboard image.
 
     python scripts/run_graph.py
-    python scripts/run_graph.py "Your research question"
+    python scripts/run_graph.py "Your question"
+    python scripts/run_graph.py "Your question" --image data/sample_dashboard.png
+    python scripts/run_graph.py --image data/sample_dashboard.png
 """
 from __future__ import annotations
 
@@ -14,8 +16,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Cosmetic: silence google-genai's async client teardown noise that fires AFTER
-# results are produced (a known upstream cleanup wart, harmless to the output).
 warnings.filterwarnings("ignore", message=r".*BaseApiClient.aclose.*")
 logging.getLogger("asyncio").setLevel(logging.ERROR)
 
@@ -25,13 +25,29 @@ from core.obs import telemetry  # noqa: E402
 DEFAULT_Q = "What are the top drivers of prepaid customer complaints this quarter?"
 
 
+def parse_args(argv: list[str]) -> tuple[str, str | None]:
+    """Return (question, image_path). --image takes the next token; the first
+    non-flag token is the question. Order-independent."""
+    image, positionals = None, []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--image" and i + 1 < len(argv):
+            image = argv[i + 1]
+            i += 2
+        else:
+            positionals.append(argv[i])
+            i += 1
+    question = positionals[0] if positionals else DEFAULT_Q
+    return question, image
+
+
 async def main() -> int:
-    question = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_Q
-    print(f"\nQUESTION: {question}\n" + "=" * 60)
+    question, image = parse_args(sys.argv[1:])
+    print(f"\nQUESTION: {question}" + (f"\nIMAGE: {image}" if image else "") + "\n" + "=" * 60)
     app = build_graph()
-    cfg = {"configurable": {"thread_id": "phase3-demo"}}
+    cfg = {"configurable": {"thread_id": "prism-demo"}}
     with telemetry(question):
-        final_state = await app.ainvoke(initial_state(question), config=cfg)
+        final_state = await app.ainvoke(initial_state(question, image_path=image), config=cfg)
     brief = final_state["final"]
     print("\n" + "=" * 60 + "\nFINAL BRIEF\n" + "=" * 60)
     print(json.dumps(brief.model_dump(), indent=2))

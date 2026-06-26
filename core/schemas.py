@@ -50,6 +50,14 @@ class CriticReport(BaseModel):
     needs_replan: bool = False
 
 
+class VisionInsights(BaseModel):
+    """Structured readout the vision agent extracts from a dashboard image."""
+    summary: str = ""                                   # one-sentence headline
+    top_categories: list[str] = Field(default_factory=list)  # ["Billing 27%", ...]
+    nps: str = ""                                       # "NPS down from 28 to 22"
+    anomalies: list[str] = Field(default_factory=list)
+
+
 class EvidenceItem(BaseModel):
     """Presentation: a supported claim + its citation, for the final brief."""
     claim: str

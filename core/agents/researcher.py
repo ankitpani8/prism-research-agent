@@ -12,21 +12,24 @@ from dataclasses import asdict
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from core.agents.vision import vision_finding
 from core.obs import TraceEvent, record_usage
 from core.schemas import Finding, ResearchState, SubTask
 
 _SYS = (
     "You are a research analyst. From the SOURCE SNIPPETS, state the single most "
-    "relevant finding for the SUBTASK as ONE precise sentence grounded ONLY in the "
-    "snippets. If the snippets do not address the subtask, reply exactly INSUFFICIENT."
+    "relevant, SPECIFIC finding for the SUBTASK as ONE sentence grounded ONLY in the "
+    "snippets — extract the best supported finding even if partial, and include "
+    "concrete categories/figures when present. Reply exactly INSUFFICIENT ONLY if the "
+    "snippets are entirely unrelated to the subtask."
 )
 
 
-async def _research_one(model, model_name, tools, subtask: SubTask) -> Finding:
+async def _research_one(model, model_name, tools, subtask: SubTask,
+                        image_path, vision_model, vision_name) -> Finding:
     if subtask.tool == "vision":
-        TraceEvent("researcher", "running", f"{subtask.tool}: deferred to Phase 4").emit()
-        return Finding(claim=f"[vision pending Phase 4] {subtask.description}",
-                       source_type="vision", source_ref="", subtask_id=subtask.id)
+        TraceEvent("researcher", "running", "vision: reading dashboard image").emit()
+        return await vision_finding(vision_model, vision_name, image_path or "", subtask)
     tool = tools.get(subtask.tool)
     if tool is None:
         return Finding(claim=f"[no tool:{subtask.tool}] {subtask.description}",
@@ -54,13 +57,16 @@ async def _research_one(model, model_name, tools, subtask: SubTask) -> Finding:
                    source_type=subtask.tool, source_ref=grounded_ref, subtask_id=subtask.id)
 
 
-def make_researcher_node(model, tools: dict, model_name: str = "light"):
+def make_researcher_node(model, tools: dict, vision_model=None,
+                         vision_name: str = "vision", model_name: str = "light"):
     async def researcher_node(state: ResearchState) -> dict:
         subtasks = state["subtasks"]
+        image_path = state.get("image_path")
         ev = TraceEvent("researcher", "running", f"{len(subtasks)} subtasks fanning out (async)")
         ev.emit()
         findings = await asyncio.gather(
-            *(_research_one(model, model_name, tools, st) for st in subtasks))
+            *(_research_one(model, model_name, tools, st, image_path, vision_model, vision_name)
+              for st in subtasks))
         grounded_n = sum(1 for f in findings if f.source_ref)
         done = TraceEvent("researcher", "complete",
                           f"{len(findings)} findings ({grounded_n} with sources)")

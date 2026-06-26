@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import sys
+import threading
 import traceback
 from pathlib import Path
 
@@ -23,6 +24,7 @@ CHUNK_SIZE = 600
 CHUNK_OVERLAP = 100
 
 _collection = None
+_init_lock = threading.Lock()  # serialize Chroma init across the async fan-out's threads
 
 
 def _warn(msg: str) -> None:
@@ -98,15 +100,21 @@ def index_corpus(corpus_dir: Path | None = None, embed_fn=None, persist: bool = 
 
 
 def _ensure_indexed(embed_fn=None, persist: bool = True):
+    # Double-checked locking: concurrent rag_retrieve calls in the async fan-out
+    # run in separate threads (asyncio.to_thread); Chroma client/collection init
+    # is NOT thread-safe, so serialize the first-time init behind a lock.
     global _collection
-    if _collection is None:
-        coll = get_collection(embed_fn=embed_fn, persist=persist)
-        if coll.count() == 0:
-            stats = _index_into(coll, settings.corpus_dir, verbose=True)
+    if _collection is not None:
+        return _collection
+    with _init_lock:
+        if _collection is None:
+            coll = get_collection(embed_fn=embed_fn, persist=persist)
             if coll.count() == 0:
-                _warn(f"collection still EMPTY after indexing. corpus_dir={settings.corpus_dir} "
-                      f"exists={Path(settings.corpus_dir).exists()} files_found={stats['files_found']}")
-        _collection = coll
+                stats = _index_into(coll, settings.corpus_dir, verbose=True)
+                if coll.count() == 0:
+                    _warn(f"collection still EMPTY after indexing. corpus_dir={settings.corpus_dir} "
+                          f"exists={Path(settings.corpus_dir).exists()} files_found={stats['files_found']}")
+            _collection = coll
     return _collection
 
 

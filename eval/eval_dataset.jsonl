@@ -1,1 +1,11 @@
-{"id": "placeholder", "note": "Phase 5 fills this: labeled + unlabeled cases incl. out-of-knowledge cases that should yield \"insufficient evidence\" not hallucinations."}
+{"id": "g1", "label": "grounded", "claim": "Billing is the single largest driver of prepaid complaints at 27 percent.", "source": "Billing & Charges is the largest complaint driver at 27% of prepaid complaints this quarter."}
+{"id": "g2", "label": "grounded", "claim": "Network and coverage complaints include dropped calls and poor indoor signal.", "source": "Network & Coverage: dropped calls, no/low signal, and poor indoor coverage."}
+{"id": "g3", "label": "grounded", "claim": "Recharge failures occur when payment is taken but the prepaid balance is not credited.", "source": "Recharge & Top-up Failures: payment debited but prepaid balance not credited."}
+{"id": "g4", "label": "grounded", "claim": "NPS declined from 28 to 22 over the year, a drop of six points.", "source": "Dashboard readout \u2014 NPS down from 28 to 22 (-6 over the year)."}
+{"id": "u1", "label": "ungrounded", "claim": "Fibre broadband installation delays are the top complaint driver in rural regions.", "source": "Billing & Charges is the largest complaint driver at 27% of prepaid complaints."}
+{"id": "u2", "label": "ungrounded", "claim": "Customer satisfaction improved sharply after the new loyalty programme launched.", "source": "Network & Coverage: dropped calls, no signal, poor indoor coverage."}
+{"id": "u3", "label": "ungrounded", "claim": "International roaming charges were reduced by forty percent this quarter.", "source": "Recharge & Top-up Failures: payment debited but balance not credited."}
+{"id": "n1", "label": "ungrounded", "claim": "Billing is the top driver of complaints this quarter.", "source": ""}
+{"id": "n2", "label": "ungrounded", "claim": "NPS is trending downward across all segments.", "source": "   "}
+{"id": "o1", "label": "ungrounded", "claim": "The exact number of prepaid complaints filed in March was 4,210.", "source": "This KB defines complaint categories; it does not contain monthly filing counts."}
+{"id": "o2", "label": "ungrounded", "claim": "The CEO promised a 50% reduction in billing complaints next year.", "source": "Billing & Charges covers incorrect charges, unexpected deductions, and missing credits."}

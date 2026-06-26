@@ -19,9 +19,9 @@ from core.schemas import ResearchState
 
 def _real_models():
     from core.byok import select_all_models
-    sels = select_all_models(["light", "critic", "heavy"])
-    models = {r: sels[r].to_langchain(temperature=0) for r in ("light", "critic", "heavy")}
-    names = {r: sels[r].name for r in ("light", "critic", "heavy")}
+    sels = select_all_models(["light", "critic", "heavy", "vision"])
+    models = {r: sels[r].to_langchain(temperature=0) for r in ("light", "critic", "heavy", "vision")}
+    names = {r: sels[r].name for r in ("light", "critic", "heavy", "vision")}
     return models, names
 
 
@@ -46,7 +46,9 @@ def build_graph(models: dict | None = None, tools: dict | None = None,
 
     g = StateGraph(ResearchState)
     g.add_node("planner", make_planner_node(models["light"], model_names["light"]))
-    g.add_node("research", make_researcher_node(models["light"], tools, model_names["light"]))
+    g.add_node("research", make_researcher_node(
+        models["light"], tools, vision_model=models.get("vision"),
+        vision_name=model_names.get("vision", "vision"), model_name=model_names["light"]))
     g.add_node("critic", make_critic_node(models["critic"], model_names["critic"]))
     g.add_node("summariser", make_summariser_node(models["heavy"], model_names["heavy"]))
 
