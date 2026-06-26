@@ -6,7 +6,7 @@
 > splitting light, the orchestrator splits one question into a spectrum of
 > sub-tasks.
 
-*Senior Data Scientist (CX + Agentic AI) assessment — built on **LangGraph**.*
+*Built on **LangGraph**.*
 
 A four-agent LangGraph state machine (**Planner → Research fan-out → Critic →
 Summariser**) with a bounded re-plan loop, deterministic-first guardrails, real
