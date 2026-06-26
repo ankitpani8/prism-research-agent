@@ -53,6 +53,9 @@ ROLE_PREFERENCES: dict[str, list[tuple[str, str]]] = {
         ("gemini-2.5-flash-lite", "gemini"),
         ("claude-sonnet-4-6", "anthropic"),
         ("claude-haiku-4-5", "anthropic"),
+        # NOTE: no local vision — small local VLMs (moondream) don't fit a low-RAM
+        # CPU box and read charts poorly. Vision routes to hosted multimodal only;
+        # if none is reachable the vision agent degrades to "unavailable" (non-fatal).
     ],
         # Critic / evaluator: LOCAL-FIRST by design — decorrelated errors + $0 cost.
     # (Robustness against the small model's noise is handled in critic.py via a
