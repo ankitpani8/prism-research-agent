@@ -49,7 +49,7 @@ async def _research_one(model, model_name, tools, subtask: SubTask) -> Finding:
     record_usage(model_name, resp)
     claim = str(getattr(resp, "content", "")).strip()
     cited = f"Sources: {sources}\n{joined}" if sources else joined
-    grounded_ref = "" if claim.upper().startswith("INSUFFICIENT") else cited
+    grounded_ref = "" if "INSUFFICIENT" in claim.upper()[:40] else cited
     return Finding(claim=claim or f"[empty] {subtask.description}",
                    source_type=subtask.tool, source_ref=grounded_ref, subtask_id=subtask.id)
 

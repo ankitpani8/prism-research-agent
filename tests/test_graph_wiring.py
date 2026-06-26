@@ -3,6 +3,9 @@
 Proves: the four-node async graph runs start->finish; the re-plan loop fires when
 the critic flags a claim and RESOLVES on re-plan; the MAX_REPLANS breaker stops
 the loop and yields an honest "insufficient evidence" brief.
+
+Scenarios control claim<->source lexical overlap explicitly, since the critic now
+combines a deterministic overlap signal with the (fake) LLM verdict.
 """
 from types import SimpleNamespace
 
@@ -18,7 +21,6 @@ class _Structured:
         self._fn = fn
 
     async def ainvoke(self, messages):
-        # mimic include_raw=True shape so token accounting is exercised
         return {"raw": SimpleNamespace(content="{}", usage_metadata=USAGE),
                 "parsed": self._fn(messages), "parsing_error": None}
 
@@ -38,8 +40,8 @@ class FakeModel:
 
 def _planner():
     return FakeModel(structured_map={Plan: lambda _m: Plan(subtasks=[
-        SubTask(id="s1", description="read the dashboard", tool="rag"),
-        SubTask(id="s2", description="retrieve complaint categories", tool="web"),
+        SubTask(id="s1", description="internal complaint categories", tool="rag"),
+        SubTask(id="s2", description="external benchmarks", tool="web"),
     ])})
 
 
@@ -49,38 +51,50 @@ def _summariser():
         recommended_actions=["prioritise billing fixes"])})
 
 
-async def _tool_with_hits(_q):
-    return [{"text": "billing is the top driver", "source": "02_billing.md"}]
-
-
-async def _tool_empty(_q):
-    return []
-
-
-def _models(critic_content):
-    # researcher uses the light model's ainvoke to synthesise a claim
+def _models(critic_content, claim_text):
     light = _planner()
-    light._content = "Billing is the top driver of prepaid complaints."
-    return ({"light": light, "critic": FakeModel(content=critic_content), "heavy": _summariser()},
-            {"web": _tool_with_hits, "rag": _tool_with_hits})
+    light._content = claim_text  # researcher synthesis claim
+    return {"light": light, "critic": FakeModel(content=critic_content), "heavy": _summariser()}
+
+
+class _FlakyTool:
+    """Empty on the first call, returns an overlapping hit afterwards -> forces
+    exactly one re-plan that then resolves."""
+    def __init__(self, text):
+        self.calls = 0
+        self.text = text
+
+    async def __call__(self, _q):
+        self.calls += 1
+        return [] if self.calls == 1 else [{"text": self.text, "source": "s.md"}]
+
+
+def _hits(text):
+    async def _t(_q):
+        return [{"text": text, "source": "s.md"}]
+    return _t
 
 
 async def test_replan_loop_fires_then_resolves():
-    # First pass: rag tool returns hits -> grounded; but force one re-plan by making
-    # the critic reject on pass 1 only is hard with stateless fakes, so we instead
-    # rely on a tool that is empty on s1 first... simplest: use an empty tool for one
-    # subtask to trigger the deterministic flag, then a resolving tool on re-plan.
-    models, _ = _models('{"grounded": true, "confidence": 0.9, "reason": "ok"}')
-    tools = {"web": _tool_empty, "rag": _tool_with_hits}  # web subtask ungrounded -> flag
+    claim = "billing is the single largest driver of prepaid complaints"
+    models = _models('{"grounded": true, "confidence": 0.9, "reason": "ok"}', claim)
+    # rag overlaps the claim (grounds); web is flaky (empty pass1 -> replan -> resolves)
+    tools = {"rag": _hits(claim), "web": _FlakyTool(claim)}
     app = build_graph(models=models, tools=tools,
                       model_names={"light": "fake", "critic": "fake", "heavy": "fake"})
     out = await app.ainvoke(initial_state("q"), config={"configurable": {"thread_id": "t1"}})
-    assert out["replan_count"] >= 1
+    assert out["replan_count"] == 1, "expected exactly one re-plan"
     assert out["final"] is not None
+    assert out["final"].evidence, "resolved run should carry grounded evidence"
 
 
 async def test_breaker_stops_at_max_replans():
-    models, tools = _models('{"grounded": false, "confidence": 0.1, "reason": "nope"}')
+    # Claim shares NO content words with the source, and the critic rejects -> the
+    # deterministic overlap can't rescue it -> loop hits the breaker.
+    claim = "zzz alpha beta gamma delta"
+    models = _models('{"grounded": false, "confidence": 0.1, "reason": "nope"}', claim)
+    tools = {"rag": _hits("completely unrelated wording here"),
+             "web": _hits("more unrelated wording entirely")}
     app = build_graph(models=models, tools=tools,
                       model_names={"light": "fake", "critic": "fake", "heavy": "fake"})
     out = await app.ainvoke(initial_state("q"), config={"configurable": {"thread_id": "t2"}})

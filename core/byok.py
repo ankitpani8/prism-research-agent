@@ -28,22 +28,27 @@ from core.config import settings
 # ---------------------------------------------------------------------------
 
 ROLE_PREFERENCES: dict[str, list[tuple[str, str]]] = {
-    # Strong synthesis / writing (Summariser, re-plan reasoning).
+    # Strong synthesis / writing (Summariser, re-plan reasoning). Degrade through
+    # hosted-small models for QUALITY before ever touching the tiny local model.
     "heavy": [
         ("gemini-2.5-flash", "gemini"),
         ("gemini-2.5-flash-lite", "gemini"),
-        ("qwen2.5:1.5b", "ollama"),
         ("claude-sonnet-4-6", "anthropic"),
+        ("claude-haiku-4-5", "anthropic"),
+        ("qwen2.5:1.5b", "ollama"),          # last resort only
     ],
-    # Bounded reasoning: research, planning, classification.
+    # Bounded reasoning: research, planning, claim synthesis. Same quality ladder;
+    # local qwen is the LAST resort, not the second option (a 1.5B model plans/
+    # synthesises poorly — see the 429-fallback lesson).
     "light": [
         ("gemini-2.5-flash", "gemini"),
-        ("qwen2.5:1.5b", "ollama"),
         ("gemini-2.5-flash-lite", "gemini"),
         ("claude-haiku-4-5", "anthropic"),
+        ("qwen2.5:1.5b", "ollama"),          # last resort only
     ],
-    # Critic / evaluator: structured "find the unsupported claims" output.
-    # Local-first BY DESIGN — decorrelated errors + zero token cost.
+    # Critic / evaluator: LOCAL-FIRST by design — decorrelated errors + $0 cost.
+    # (Robustness against the small model's noise is handled in critic.py via a
+    # deterministic lexical-groundedness signal combined with this LLM verdict.)
     "critic": [
         ("qwen2.5:1.5b", "ollama"),
         ("gemini-2.5-flash-lite", "gemini"),
