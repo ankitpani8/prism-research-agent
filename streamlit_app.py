@@ -26,7 +26,7 @@ DEFAULT_Q = "What are the top drivers of prepaid customer complaints this quarte
 ICON = {"planner": "🧭", "researcher": "🔎", "critic": "⚖️", "summariser": "📝",
         "vision": "🖼️", "guardrail": "🛡️"}
 
-st.set_page_config(page_title="Prism", page_icon="🔱", layout="wide")
+st.set_page_config(page_title="Prism", page_icon="🔎", layout="wide")
 
 
 class TracePanel:
@@ -89,7 +89,7 @@ def _render_brief(result: dict) -> None:
 
 
 # ---------------- layout ----------------
-st.title("🔱 Prism")
+st.title("🔎 Prism")
 st.caption("A multi-agent research assistant: it decomposes a question, gathers and "
            "cross-validates evidence across the web, internal documents, and a dashboard "
            "image, and returns a structured, cited, confidence-scored brief.")
