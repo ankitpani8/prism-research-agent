@@ -79,6 +79,13 @@ def make_planner_node(model, model_name: str = "light"):
         if len(kept) < 2:
             kept = _fallback_subtasks(state["question"], has_image)
 
+        # Deterministic guarantee (deterministic > LLM): if an image is attached it
+        # MUST be read — never rely on a small planner model to remember to emit the
+        # vision subtask. Inject one if the LLM omitted it.
+        if has_image and not any(s.tool == "vision" for s in kept):
+            kept.insert(0, SubTask(id="vis1",
+                                   description="read the attached dashboard image", tool="vision"))
+
         done = TraceEvent("planner", "complete",
                           f"{len(kept)} subtasks [{', '.join(s.tool for s in kept)}]")
         done.emit()
